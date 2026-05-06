@@ -1,0 +1,6 @@
+{
+  "name": "EXTRACT CONTENT",
+  "description": "Konvertieren Sie Web-Links und Mistral AI-Chats in herunterladbare PDF-, Markdown- oder PNG-Dokumente.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
