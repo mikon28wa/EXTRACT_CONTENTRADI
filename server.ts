@@ -9,6 +9,10 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Cache für wiederholte URL-Anfragen (Performance-Optimierung)
+  const urlCache = new Map<string, { data: any; timestamp: number }>();
+  const CACHE_TTL = 5 * 60 * 1000; // 5 Minuten
+
   const turndownService = new TurndownService({
     headingStyle: 'atx',
     codeBlockStyle: 'fenced'
@@ -16,7 +20,7 @@ async function startServer() {
 
   app.use(express.json());
 
-  // API Route to fetch and extract content
+  // API Route to fetch and extract content with caching
   app.post("/api/fetch", async (req, res) => {
     const { url } = req.body;
 
@@ -24,35 +28,56 @@ async function startServer() {
       return res.status(400).json({ error: "URL is required" });
     }
 
+    // Check cache first
+    const cached = urlCache.get(url);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      console.log(`Cache hit for URL: ${url}`);
+      return res.json(cached.data);
+    }
+
     try {
       console.log(`Fetching URL: ${url}`);
+      
+      // Timeout-Optimierung mit AbortController
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      
       const response = await axios.get(url, {
-        timeout: 10000,
+        signal: controller.signal,
+        timeout: 8000,
+        maxRedirects: 3,
+        maxContentLength: 5 * 1024 * 1024, // 5MB Limit
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Encoding': 'gzip, deflate',
+          'Connection': 'keep-alive'
         },
-        validateStatus: (status) => status < 500 // Accept 404s etc to handle them gracefully
+        validateStatus: (status) => status < 500,
+        decompress: true
       });
+      
+      clearTimeout(timeoutId);
 
       if (response.status !== 200) {
-        return res.status(response.status).json({ 
+        const errorData = { 
           error: `HTTP Error ${response.status}: ${response.statusText}`,
           statusCode: response.status 
-        });
+        };
+        urlCache.set(url, { data: errorData, timestamp: Date.now() });
+        return res.status(response.status).json(errorData);
       }
 
       const html = response.data;
       const $ = cheerio.load(html);
 
-      // Remove noise
-      $('script, style, nav, footer, header, iframe, noscript, .ad, .sidebar').remove();
+      // Remove noise - optimized selector batch
+      $('script, style, nav, footer, header, iframe, noscript, .ad, .sidebar, .advertisement, .cookie-banner').remove();
 
       let title = $('title').text() || $('h1').first().text() || "Untitled Content";
       let content = "";
-      let elementToConvert: cheerio.Cheerio | null = null;
 
-      // Try specialized Mistral/Chat selectors or generic ones
+      // Optimized selector priority
       const selectors = [
         '.chat-container', 
         '.messages-container',
@@ -61,13 +86,13 @@ async function startServer() {
         'article', 
         '#content',
         '.post-content',
-        'body' // Absolute fallback
+        '.content',
+        'body'
       ];
 
       for (const selector of selectors) {
         const el = $(selector);
         if (el.length > 0) {
-          // If we find a good container, prefer its HTML for better turndown results
           const htmlContent = el.html();
           if (htmlContent && htmlContent.length > 100) {
             content = turndownService.turndown(htmlContent);
@@ -80,13 +105,26 @@ async function startServer() {
         content = turndownService.turndown($('body').html() || "");
       }
 
-      res.json({ title, content });
+      const resultData = { title, content };
+      
+      // Cache successful result
+      urlCache.set(url, { data: resultData, timestamp: Date.now() });
+      
+      // Cleanup old cache entries (keep last 100)
+      if (urlCache.size > 100) {
+        const oldestKey = Array.from(urlCache.keys())[0];
+        urlCache.delete(oldestKey);
+      }
+
+      res.json(resultData);
     } catch (error: any) {
-      const isTimeout = error.code === 'ECONNABORTED';
-      res.status(isTimeout ? 408 : 500).json({ 
+      const isTimeout = error.code === 'ECONNABORTED' || error.name === 'AbortError';
+      const errorData = { 
         error: isTimeout ? "Request timed out" : (error.message || "Unknown error during fetch"),
         details: error.code
-      });
+      };
+      urlCache.set(url, { data: errorData, timestamp: Date.now() });
+      res.status(isTimeout ? 408 : 500).json(errorData);
     }
   });
 
