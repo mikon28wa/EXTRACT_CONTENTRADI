@@ -1,8 +1,64 @@
+```
+# Dependencies
 node_modules/
-build/
+
+# Environment variables
+.env
+.env.local
+.env.*
+
+# Build outputs
 dist/
-coverage/
-.DS_Store
+build/
+target/
+
+# Logs
 *.log
-.env*
-!.env.example
+
+# IDE files
+.vscode/
+.idea/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Temporary files
+*.tmp
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+coverage/
+htmlcov/
+
+# Compression artifacts
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
+
+```

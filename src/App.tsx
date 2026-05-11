@@ -75,7 +75,7 @@ export default function App() {
     // Validation
     const validation = UrlListSchema.safeParse(urls);
     if (!validation.success) {
-      setValidationError(validation.error.errors[0].message);
+      setValidationError(validation.error.issues[0].message);
       return;
     }
     setValidationError(null);
@@ -104,8 +104,9 @@ export default function App() {
         } else {
           newResults.push({ url, status: 'success', data: { ...result, url } });
         }
-      } catch (err: any) {
-        newResults.push({ url, status: 'fail', error: err.message });
+      } catch (err: unknown) {
+        const error = err as { message?: string };
+        newResults.push({ url, status: 'fail', error: error.message || 'Unbekannter Fehler' });
       }
       setResults([...newResults]);
     }
@@ -120,7 +121,7 @@ export default function App() {
   const handleManualExport = () => {
     const validation = ManualContentSchema.safeParse(manualContent);
     if (!validation.success) {
-      setValidationError(validation.error.errors[0].message);
+      setValidationError(validation.error.issues[0].message);
       return;
     }
     setValidationError(null);
@@ -694,11 +695,13 @@ export default function App() {
                   </div>
 
                   <div className="flex-grow overflow-auto p-4 md:p-12 bg-[#E5E5E5] scroll-smooth">
-                    {results.filter(r => r.status === 'success').map((res, idx) => (
+                    {results.filter(r => r.status === 'success').map((res, idx) => {
+                      const resultIndex = results.indexOf(res);
+                      return (
                       <article 
                         key={idx}
                         id={`segment-${idx}`}
-                        ref={(el) => (documentRefs.current[results.indexOf(res)] = el)}
+                        ref={(el: HTMLDivElement | null) => { documentRefs.current[resultIndex] = el; }}
                         className="bg-white p-12 shadow-2xl mx-auto w-full max-w-[800px] min-h-[1100px] relative text-[#141414] mb-12 last:mb-0"
                       >
                         <div className="absolute top-0 left-0 w-full h-1 bg-black" aria-hidden="true" />
@@ -734,7 +737,8 @@ export default function App() {
                           <ReactMarkdown>{res.data!.content}</ReactMarkdown>
                         </div>
                       </article>
-                    ))}
+                    );
+                    })}
                   </div>
                </div>
             </div>
