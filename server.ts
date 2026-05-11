@@ -50,7 +50,6 @@ async function startServer() {
 
       let title = $('title').text() || $('h1').first().text() || "Untitled Content";
       let content = "";
-      let elementToConvert: cheerio.Cheerio | null = null;
 
       // Try specialized Mistral/Chat selectors or generic ones
       const selectors = [
@@ -81,11 +80,12 @@ async function startServer() {
       }
 
       res.json({ title, content });
-    } catch (error: any) {
-      const isTimeout = error.code === 'ECONNABORTED';
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string };
+      const isTimeout = err.code === 'ECONNABORTED';
       res.status(isTimeout ? 408 : 500).json({ 
-        error: isTimeout ? "Request timed out" : (error.message || "Unknown error during fetch"),
-        details: error.code
+        error: isTimeout ? "Request timed out" : (err.message || "Unknown error during fetch"),
+        details: err.code
       });
     }
   });
